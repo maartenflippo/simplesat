@@ -60,18 +60,12 @@ impl Solver {
             decision_level += 1;
 
             self.assign_literal(picked_variable, decision_level, None);
-            println!(
-                "Decision: literal {:?} set at dl {}",
-                picked_variable, decision_level
-            );
 
             // Continuously propagate and learn, until propagation no longer derives a conflict.
             loop {
                 let unit_propagate_result = self.unit_propagate(decision_level);
 
                 if let Some(conflicting_clause) = unit_propagate_result {
-                    println!("\tConflict found.");
-
                     // If the conflict was at the top level, the formula is unsatisfiable
                     if decision_level == 0 {
                         return SolveResult::Unsat;
@@ -79,7 +73,6 @@ impl Solver {
 
                     decision_level =
                         self.conflict_analysis_and_backtrack(conflicting_clause, decision_level);
-                    println!("\tBacktracking to level {}", decision_level);
                 } else {
                     // No conflict was derived, continue with search.
                     break;

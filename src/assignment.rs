@@ -80,3 +80,81 @@ impl Assignment {
         literal.var().to_u64() as usize - 1
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_assignment_makes_all_variables_unset() {
+        let assignment = Assignment::new(3);
+
+        for var in 1..=3 {
+            let pos = lit(var);
+            let neg = lit(-var);
+
+            assert!(assignment.is_unassigned(pos));
+            assert!(assignment.is_unassigned(neg));
+            assert!(!assignment.is_true(pos));
+            assert!(!assignment.is_true(neg));
+            assert!(!assignment.is_false(pos));
+            assert!(!assignment.is_false(neg));
+        }
+    }
+
+    #[test]
+    fn assigning_a_literal_can_be_observed() {
+        let mut assignment = Assignment::new(3);
+
+        assignment.set_true(lit(2));
+        assert!(assignment.is_true(lit(2)));
+        assert!(!assignment.is_false(lit(2)));
+        assert!(!assignment.is_true(lit(-2)));
+        assert!(assignment.is_false(lit(-2)));
+        assert!(!assignment.is_unassigned(lit(2)));
+        assert_eq!(1, assignment.size());
+    }
+
+    #[test]
+    fn unassigning_a_literal_is_observed() {
+        let mut assignment = Assignment::new(3);
+
+        let pos = lit(2);
+        let neg = lit(-2);
+
+        assignment.set_true(pos);
+        assignment.unassign(pos);
+
+        assert!(assignment.is_unassigned(pos));
+        assert!(assignment.is_unassigned(neg));
+        assert!(!assignment.is_true(pos));
+        assert!(!assignment.is_true(neg));
+        assert!(!assignment.is_false(pos));
+        assert!(!assignment.is_false(neg));
+    }
+
+    #[test]
+    fn iterator_gives_all_literals() {
+        let mut assignment = Assignment::new(3);
+        assignment.set_true(lit(1));
+        assignment.set_true(lit(-2));
+        assignment.set_true(lit(3));
+
+        let lits = assignment.iter().collect::<Vec<_>>();
+        assert_eq!(vec![lit(1), lit(-2), lit(3)], lits);
+    }
+
+    #[test]
+    fn iterator_excludes_unassigned_literals() {
+        let mut assignment = Assignment::new(3);
+        assignment.set_true(lit(1));
+        assignment.set_true(lit(-3));
+
+        let lits = assignment.iter().collect::<Vec<_>>();
+        assert_eq!(vec![lit(1), lit(-3)], lits);
+    }
+
+    fn lit(l: i64) -> Lit {
+        Lit::from_i64(l)
+    }
+}

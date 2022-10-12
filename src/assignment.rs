@@ -1,14 +1,17 @@
+use std::iter::FusedIterator;
+
 use dimacs::{Lit, Sign};
+use fixedbitset::FixedBitSet;
 
 pub struct Assignment {
-    buffer: Vec<Option<bool>>,
+    buffer: FixedBitSet,
     assigned_literal_count: usize,
 }
 
 impl Assignment {
     pub fn new(num_variables: usize) -> Assignment {
         Assignment {
-            buffer: vec![None; num_variables],
+            buffer: FixedBitSet::with_capacity(num_variables * 2),
             assigned_literal_count: 0,
         }
     }
@@ -18,9 +21,8 @@ impl Assignment {
     /// cannot distinguish between the cases when the literal is false or
     /// unassigned.
     pub fn is_true(&self, literal: Lit) -> bool {
-        self.buffer[self.index(literal)]
-            .map(|value| value == (literal.sign() == Sign::Pos))
-            .unwrap_or(false)
+        let idx = self.index(literal);
+        self.buffer[idx] && self.buffer[idx + 1] == (literal.sign() == Sign::Pos)
     }
 
     /// Indicates whether a literal is false under the current assignment. If
@@ -28,27 +30,27 @@ impl Assignment {
     /// cannot distinguish between the cases when the literal is true or
     /// unassigned.
     pub fn is_false(&self, literal: Lit) -> bool {
-        self.buffer[self.index(literal)]
-            .map(|value| value != (literal.sign() == Sign::Pos))
-            .unwrap_or(false)
+        let idx = self.index(literal);
+        self.buffer[idx] && self.buffer[idx + 1] != (literal.sign() == Sign::Pos)
     }
 
     /// Indicates whether a literal is unassigned under the current assignment.
     pub fn is_unassigned(&self, literal: Lit) -> bool {
-        self.buffer[self.index(literal)] == None
+        !self.buffer[self.index(literal)]
     }
 
     /// Set the value of the given literal to true under the current assignment.
     pub fn set_true(&mut self, literal: Lit) {
         let idx = self.index(literal);
-        self.buffer[idx] = Some(literal.sign() == Sign::Pos);
+        self.buffer.set(idx, true);
+        self.buffer.set(idx + 1, literal.sign() == Sign::Pos);
 
         self.assigned_literal_count += 1;
     }
 
     pub fn unassign(&mut self, literal: Lit) {
         let idx = self.index(literal);
-        self.buffer[idx] = None;
+        self.buffer.set(idx, false);
 
         self.assigned_literal_count -= 1;
     }
@@ -56,20 +58,10 @@ impl Assignment {
     /// Returns an iterator of the literals that are 'true' in the current
     /// assignment.
     pub fn iter(&self) -> impl Iterator<Item = Lit> + '_ {
-        self.buffer
-            .iter()
-            .enumerate()
-            .filter_map(|(variable_idx, &value)| {
-                let var = (variable_idx + 1) as i64;
-
-                value.map(|v| {
-                    if v {
-                        Lit::from_i64(var)
-                    } else {
-                        Lit::from_i64(-var)
-                    }
-                })
-            })
+        AssignmentIter {
+            assignment: self,
+            idx: 0,
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -77,9 +69,50 @@ impl Assignment {
     }
 
     fn index(&self, literal: Lit) -> usize {
-        literal.var().to_u64() as usize - 1
+        (literal.var().to_u64() as usize - 1) * 2
     }
 }
+
+struct AssignmentIter<'a> {
+    assignment: &'a Assignment,
+    idx: usize,
+}
+
+impl<'a> AssignmentIter<'a> {
+    fn next_var(&mut self) {
+        self.idx += 2;
+    }
+
+    fn is_finished(&self) -> bool {
+        self.idx >= self.assignment.buffer.len()
+    }
+}
+
+impl<'a> Iterator for AssignmentIter<'a> {
+    type Item = Lit;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.is_finished() && !self.assignment.buffer[self.idx] {
+            self.next_var();
+        }
+
+        if self.is_finished() {
+            return None;
+        }
+
+        let var = (self.idx / 2) as i64 + 1;
+        let is_positive = self.assignment.buffer[self.idx + 1];
+        self.next_var();
+
+        if is_positive {
+            Some(Lit::from_i64(var))
+        } else {
+            Some(Lit::from_i64(-var))
+        }
+    }
+}
+
+impl<'a> FusedIterator for AssignmentIter<'a> {}
 
 #[cfg(test)]
 mod tests {
